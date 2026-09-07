@@ -1,87 +1,79 @@
 local KazeUI = KazeUI or loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/KazeHub/UI/refs/heads/main/libraryUI.txt"
 ))()
-
 local Window = KazeUI:CreateWindow({
     Title = "The Mimic Classic",
     Author = "Kaze",
-    Version = "Chapter I, II III",
+    Version = "Classic",
     Size = UDim2.fromOffset(500, 370),
     Icon = "79414074886215",
     Theme = "Obsidian",
     GlowStyle = "Cycle",
     GlowColor = true,
-    
     PopupTitle = "Welcome to Kaze Hub!",
-    PopupContent = "Thank you for using my script! if you found any bug, please report it to the discord.",
+    PopupContent = "Join Discord Server. If you found any bug please, report it to the Discord.",
     DiscordLink = "https://discord.gg/DKGRny4DD",
-
     OpenButton = {
         Icon = "79414074886215",
         Hidable = false,
         Size = UDim2.fromOffset(60, 60)
     },
 })
-
 local Player = Window:CreateTab({
     Title = "Player",
     Icon = "user"
 })
-
 local Workspace = clonenav or (cloneref and cloneref(game:GetService("Workspace"))) or game:GetService("Workspace")
-
 Player:Section("Client")
-
 local InstantPromptEnabled = false
-local promptConnection
-
+local promptTask = nil
+local originalHoldDurations = {}
 Player:Toggle({
     Title = "Instant Prompt",
     Default = false,
     Callback = function(s)
         InstantPromptEnabled = s
-        
-        if promptConnection then
-            promptConnection:Disconnect()
-            promptConnection = nil
-        end
-        
+        if promptTask then task.cancel(promptTask) promptTask = nil end
         if InstantPromptEnabled then
+            originalHoldDurations = {}
             for _, prompt in ipairs(Workspace:GetDescendants()) do
                 if prompt:IsA("ProximityPrompt") then
+                    originalHoldDurations[prompt] = prompt.HoldDuration
                     prompt.HoldDuration = 0
                 end
             end
-            
-            promptConnection = Workspace.DescendantAdded:Connect(function(descendant)
-                if descendant:IsA("ProximityPrompt") then
-                    descendant.HoldDuration = 0
+            promptTask = task.spawn(function()
+                while InstantPromptEnabled do
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if prompt:IsA("ProximityPrompt") and prompt.HoldDuration ~= 0 then
+                            if not originalHoldDurations[prompt] then originalHoldDurations[prompt] = prompt.HoldDuration end
+                            prompt.HoldDuration = 0
+                        end
+                    end
+                    task.wait(0.5)
                 end
             end)
+        else
+            for p, orig in pairs(originalHoldDurations or {}) do
+                if p and p.Parent then p.HoldDuration = orig end
+            end
+            originalHoldDurations = {}
         end
     end
 })
-
 local Lighting = clonenav or (cloneref and cloneref(game:GetService("Lighting"))) or game:GetService("Lighting")
-
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 local FB_ENABLED = false
-local fbConnection
 local origAmbient = Lighting.Ambient
 local origOutdoorAmbient = Lighting.OutdoorAmbient
 local origBrightness = Lighting.Brightness
 local origClockTime = Lighting.ClockTime
 local origShadows = Lighting.GlobalShadows
-
 Player:Toggle({
     Title = "FullBright",
     Default = false,
     Callback = function(s)
         FB_ENABLED = s
-        if fbConnection then 
-            fbConnection:Disconnect() 
-            fbConnection = nil
-        end
-        
         if FB_ENABLED then
             local function applyBright()
                 Lighting.Ambient = Color3.fromRGB(178, 178, 178)
@@ -90,9 +82,7 @@ Player:Toggle({
                 Lighting.ClockTime = 14
                 Lighting.GlobalShadows = false
             end
-            
             applyBright()
-            fbConnection = Lighting.Changed:Connect(applyBright)
         else
             Lighting.Ambient = origAmbient
             Lighting.OutdoorAmbient = origOutdoorAmbient
@@ -102,44 +92,66 @@ Player:Toggle({
         end
     end
 })
-
 local RunService = clonenav or (cloneref and cloneref(game:GetService("RunService"))) or game:GetService("RunService")
 local Players = clonenav or (cloneref and cloneref(game:GetService("Players"))) or game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-
+local CharCache={Character=nil,Humanoid=nil,HumanoidRootPart=nil,BaseParts={}}
+local function refreshCharCache(force)
+local char=LocalPlayer.Character
+if not force and char==CharCache.Character and CharCache.HumanoidRootPart and CharCache.HumanoidRootPart.Parent then
+return CharCache.Character,CharCache.Humanoid,CharCache.HumanoidRootPart
+end
+CharCache.Character=char
+CharCache.Humanoid=char and char:FindFirstChildOfClass("Humanoid") or nil
+CharCache.HumanoidRootPart=char and char:FindFirstChild("HumanoidRootPart") or nil
+CharCache.BaseParts={}
+if char then
+for _,part in ipairs(char:GetDescendants()) do
+if part:IsA("BasePart") then table.insert(CharCache.BaseParts,part) end
+end
+end
+return CharCache.Character,CharCache.Humanoid,CharCache.HumanoidRootPart
+end
+LocalPlayer.CharacterAdded:Connect(function()
+task.defer(function() task.wait(0.05) refreshCharCache(true) end)
+end)
+LocalPlayer.CharacterRemoving:Connect(function()
+CharCache.Character=nil CharCache.Humanoid=nil CharCache.HumanoidRootPart=nil CharCache.BaseParts={}
+end)
+refreshCharCache(true)
 local NoclipEnabled = false
-local noclipConnection
-
+local noclipTask
 Player:Toggle({
     Title = "Noclip",
     Default = false,
     Callback = function(s)
         NoclipEnabled = s
-        
-        if noclipConnection then
-            noclipConnection:Disconnect()
-            noclipConnection = nil
-        end
-        
+        if noclipTask then task.cancel(noclipTask) noclipTask = nil end
         if NoclipEnabled then
-            noclipConnection = RunService.Stepped:Connect(function()
-                local character = LocalPlayer.Character
-                if character then
-                    for _, part in ipairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
+            refreshCharCache(true)
+            noclipTask = task.spawn(function()
+                while NoclipEnabled do
+                    refreshCharCache()
+                    for i=1,#CharCache.BaseParts do
+                        local part=CharCache.BaseParts[i]
+                        if part and part.Parent and part.CanCollide then part.CanCollide=false end
                     end
+                    task.wait(0.1)
                 end
             end)
+        else
+            local char=LocalPlayer.Character
+            if char then
+                for _,part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide=true end
+                end
+            end
         end
     end
 })
-
 local TPWalkSpeed = 1
 local TPWalkEnabled = false
-local tpWalkConnection = nil
-
+local tpWalkTask = nil
 Player:Slider({
     Title = "TP Walk Speed",
     Min = 1,
@@ -149,43 +161,28 @@ Player:Slider({
         TPWalkSpeed = v
     end
 })
-
 Player:Toggle({
     Title = "Enable TP Walk",
     Default = false,
     Callback = function(s)
         TPWalkEnabled = s
-
-        if tpWalkConnection then
-            tpWalkConnection:Disconnect()
-            tpWalkConnection = nil
-        end
-
+        if tpWalkTask then task.cancel(tpWalkTask) tpWalkTask = nil end
         if TPWalkEnabled then
-            tpWalkConnection = RunService.RenderStepped:Connect(function(dt)
-                local character = LocalPlayer.Character
-                if character then
-                    local hrp = character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    
-                    if hrp and humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                        hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (TPWalkSpeed * 0.5 * dt * 40))
+            tpWalkTask = task.spawn(function()
+                while TPWalkEnabled do
+                    local _,humanoid,hrp=refreshCharCache()
+                    if hrp and humanoid and humanoid.MoveDirection.Magnitude>0 then
+                        hrp.CFrame=hrp.CFrame+(humanoid.MoveDirection*(TPWalkSpeed*0.35))
                     end
+                    task.wait(0.03)
                 end
             end)
         end
     end
 })
-
-
-
--- ==========================================
--- 1. FIXED FLY SCRIPT (NO FALLING ON STOP)
--- ==========================================
 local TargetFlySpeed = 16
 local FLY_ENABLED = false
-local flyConnection
-
+local flyTask = nil
 Player:Slider({
     Title = "Fly Speed",
     Min = 16,
@@ -195,78 +192,53 @@ Player:Slider({
         TargetFlySpeed = val
     end
 })
-
 Player:Toggle({
     Title = "Enable Fly",
     Default = false,
     Callback = function(state)
         FLY_ENABLED = state
-        
-        local function stopFly()
-            if flyConnection then 
-                flyConnection:Disconnect() 
-                flyConnection = nil 
-            end
-            
-            local character = LocalPlayer.Character
-            local hrp = character and character:FindFirstChild("HumanoidRootPart")
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            
-            if humanoid then
-                humanoid.PlatformStand = false
-            end
-            if hrp then
-                hrp.Anchored = false
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                hrp.AssemblyLinearVelocity = Vector3.zero
-            end
+        if flyTask then task.cancel(flyTask) flyTask = nil end
+        local character = LocalPlayer.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.PlatformStand = false end
+        if hrp then
+            hrp.Anchored = false
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hrp.AssemblyLinearVelocity = Vector3.zero
         end
-        
-        stopFly()
-        
         if FLY_ENABLED then
             local camera = Workspace.CurrentCamera
-            
-            flyConnection = RunService.RenderStepped:Connect(function(dt)
-                local character = LocalPlayer.Character
-                local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                
-                if hrp and humanoid then
-                    local moveDir = humanoid.MoveDirection
-                    
-                    if moveDir.Magnitude > 0 then
-                        -- Kapag gumagalaw: Unanchor at galawin ang CFrame
-                        hrp.Anchored = false
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        
-                        local cameraCF = camera.CFrame
-                        local relativeVector = cameraCF:VectorToObjectSpace(moveDir)
-                        local flyDirection = (cameraCF.RightVector * relativeVector.X) + (cameraCF.LookVector * -relativeVector.Z)
-                        
-                        if flyDirection.Magnitude > 0 then
-                            flyDirection = flyDirection.Unit
+            flyTask = task.spawn(function()
+                while FLY_ENABLED do
+                    local _,humanoid,hrp=refreshCharCache()
+                    if hrp and humanoid then
+                        local moveDir=humanoid.MoveDirection
+                        if moveDir.Magnitude>0 then
+                            hrp.Anchored=false
+                            hrp.AssemblyLinearVelocity=Vector3.zero
+                            hrp.AssemblyAngularVelocity=Vector3.zero
+                            local cameraCF=camera.CFrame
+                            local relativeVector=cameraCF:VectorToObjectSpace(moveDir)
+                            local flyDirection=(cameraCF.RightVector*relativeVector.X)+(cameraCF.LookVector*-relativeVector.Z)
+                            if flyDirection.Magnitude>0 then flyDirection=flyDirection.Unit end
+                            hrp.CFrame=CFrame.lookAlong(hrp.Position,flyDirection)+(flyDirection*(TargetFlySpeed*0.03))
+                        else
+                            hrp.AssemblyLinearVelocity=Vector3.zero
+                            hrp.AssemblyAngularVelocity=Vector3.zero
+                            hrp.Anchored=true
                         end
-                        
-                        hrp.CFrame = CFrame.lookAlong(hrp.Position, flyDirection) + (flyDirection * (TargetFlySpeed * dt))
-                    else
-                        -- Kapag huminto: I-anchor ang HRP para hindi bumaba/mahulog
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        hrp.Anchored = true
                     end
+                    task.wait(0.03)
                 end
             end)
         end
     end
 })
-
 local GameTab = Window:CreateTab({
     Title = "Game",
     Icon = "gamepad-2"
 })
-
 GameTab:Button({
     Title = "Low GFX",
     Callback = function()
@@ -274,13 +246,11 @@ GameTab:Button({
         local DISABLE_POST_PROCESSING = true
         local DISABLE_PARTICLES = true
         local DISABLE_TEXTURES = true
-
         pcall(function()
             if DISABLE_SHADOWS then
                 Lighting.GlobalShadows = false
                 Lighting.ShadowSoftness = 0
             end
-
             if DISABLE_POST_PROCESSING then
                 for _, child in ipairs(Lighting:GetChildren()) do
                     if child:IsA("PostEffect") or child:IsA("Atmosphere") or child:IsA("Sky") then
@@ -288,7 +258,6 @@ GameTab:Button({
                     end
                 end
             end
-
             if Terrain then
                 Terrain.WaterWaveSize = 0
                 Terrain.WaterWaveTransparency = 1
@@ -297,7 +266,6 @@ GameTab:Button({
                     sethiddenproperty(Terrain, "Decoration", false)
                 end)
             end
-
             for _, obj in ipairs(Workspace:GetDescendants()) do
                 if DISABLE_PARTICLES and (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles")) then
                     obj.Enabled = false
@@ -309,7 +277,6 @@ GameTab:Button({
                 end
             end
         end)
-
         pcall(function()
             game:GetService("StarterGui"):SetCore("SendNotification", {
                 Title = "Performance Booster",
@@ -319,17 +286,12 @@ GameTab:Button({
         end)
     end
 })
-
---// === SERVICES (UNC) ===
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
-
 local player = Players.LocalPlayer
-
---// === SAFE TELEPORT & TWEEN HELPERS ===
 local function SafeTeleport(hrp, pos)
     if not hrp then return end
     hrp.Anchored = true
@@ -339,7 +301,6 @@ local function SafeTeleport(hrp, pos)
     task.wait(0.15)
     hrp.Anchored = false
 end
-
 local function SafeTween(hrp, pos)
     if not hrp then return end
     hrp.Anchored = true
@@ -351,181 +312,122 @@ local function SafeTween(hrp, pos)
     task.wait(2.6)
     hrp.Anchored = false
 end
-
---------------------------------------------------
--- TABS CREATION
---------------------------------------------------
 local Control1 = Window:CreateTab({ Title = "Control 1", Icon = "Book" })
 local Control2 = Window:CreateTab({ Title = "Control 2", Icon = "Book" })
 local Control3 = Window:CreateTab({ Title = "Control 3", Icon = "Book" })
-
---------------------------------------------------
--- CONTROL 1 TAB
---------------------------------------------------
-
 Control1:Section("The House of Death Stage")
-
 Control1:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         local tp = Workspace:FindFirstChild("Game Teleporter")
-
         if tp then
             task.wait(0.75)
             SafeTeleport(hrp, tp.Position)
         end
     end
 })
-
 Control1:Section("Hotel Stage")
-
 Control1:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
-
         local platform = workspace:FindFirstChild("Platform")
-
         if platform then
-            -- Safely pivot/teleport to the target platform position
             hrp.CFrame = platform.CFrame + Vector3.new(0, 5, 0)
         end
     end
 })
-
-
---------------------------------------------------
--- CONTROL 2 TAB
---------------------------------------------------
 Control2:Section("Imperial Palace Stage")
-
 Control2:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         local tp = Workspace:FindFirstChild("Game Teleporter")
-
         if tp then
             task.wait(0.25)
             SafeTeleport(hrp, tp.Position)
         end
     end
 })
-
 Control2:Section("Realm of the Forgotten Stage")
-
 Control2:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         local tp = Workspace:FindFirstChild("Game Teleporter")
-
         if tp then
             task.wait(0.25)
             SafeTeleport(hrp, tp.Position)
         end
     end
 })
-
 Control2:Section("Labyrinth Stage")
-
 local TweenService = game:GetService("TweenService")
-
 Control2:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
-
-        -- 1. Initial teleport
         SafeTeleport(hrp, Vector3.new(881, 73, -354))
-
-        -- 2. Delay
         task.wait(0.5)
-
-        -- 3. Smooth tween to target coordinates
         local targetCFrame = CFrame.new(1143, 84, -351)
         local tweenInfo = TweenInfo.new(
-            2.5, -- Duration in seconds (adjust if you want it faster or slower)
+            2.5,
             Enum.EasingStyle.Sine,
             Enum.EasingDirection.Out
         )
-
         local tween = TweenService:Create(hrp, tweenInfo, { CFrame = targetCFrame })
         tween:Play()
     end
 })
-
-
-
---------------------------------------------------
--- CONTROL 3 TAB
---------------------------------------------------
 Control3:Section("The Looping Minka Stage")
-
 Control3:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         local tp = Workspace:FindFirstChild("Game Teleporter")
-
         if tp then
             task.wait(0.25)
             SafeTeleport(hrp, tp.Position)
         end
     end
 })
-
 Control3:Section("The Sakura Swamp Stage")
-
 Control3:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
         local tp = Workspace:FindFirstChild("Game Teleporter")
-
         if tp then
             task.wait(0.25)
             SafeTeleport(hrp, tp.Position)
         end
     end
 })
-
 Control3:Section("The Indigent Family's Minka Stage")
-
 Control3:Button({
     Title = "Auto Win",
     Callback = function()
         local character = player.Character or player.CharacterAdded:Wait()
         local hrp = character:WaitForChild("HumanoidRootPart")
-
-        -- Target coordinates
         local initialPos = Vector3.new(255.908203125, 17.105751037597656, -315.80157470703125)
         local checkPos = Vector3.new(445, 16, -718)
         local finalPos = Vector3.new(430.96466064453125, 17.80474090576172, -844.690185546875)
-
-        -- Step 1: Initial teleport
         SafeTeleport(hrp, initialPos)
-
-        -- Step 2: Wait until the player is within 20 units of checkPos
-        repeat 
+        repeat
             task.wait(0.1)
         until (hrp.Position - checkPos).Magnitude < 20
-
-        -- Step 3: Wait 0.5 seconds then tween to final position
         task.wait(0.5)
-        
         if typeof(SafeTween) == "function" then
             SafeTween(hrp, finalPos)
         else
-            -- Fallback smooth tween if SafeTween isn't defined in your script environment
             local TweenService = game:GetService("TweenService")
             local tweenInfo = TweenInfo.new(2.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
             local tween = TweenService:Create(hrp, tweenInfo, { CFrame = CFrame.new(finalPos) })

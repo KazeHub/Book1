@@ -4,7 +4,7 @@ local KazeUI = KazeUI or loadstring(game:HttpGet(
 local Window = KazeUI:CreateWindow({
     Title = "The Mimic",
     Author = "Kaze",
-    Version = "Book II",
+    Version = "Book I",
     Size = UDim2.fromOffset(500, 370),
     Icon = "79414074886215",
     Theme = "Obsidian",
@@ -62,6 +62,7 @@ Player:Toggle({
     end
 })
 local Lighting = clonenav or (cloneref and cloneref(game:GetService("Lighting"))) or game:GetService("Lighting")
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 local FB_ENABLED = false
 local origAmbient = Lighting.Ambient
 local origOutdoorAmbient = Lighting.OutdoorAmbient
@@ -234,720 +235,546 @@ Player:Toggle({
         end
     end
 })
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local player = Players.LocalPlayer
-local function getChar()
-    return player.Character or player.CharacterAdded:Wait()
-end
-local function getHRP()
-    local char = getChar()
-    return char:WaitForChild("HumanoidRootPart", 5)
-end
-local function safeFirePrompt(prompt)
-    if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
-        fireproximityprompt(prompt)
-    end
-end
-local function safeFireTouch(part, timeout)
-    local hrp = getHRP()
-    if not hrp or not part then return end
-    firetouchinterest(hrp, part, 0)
-    task.wait(timeout or 0.1)
-    firetouchinterest(hrp, part, 1)
-end
-local function fireTouchNearby(hrp, radius)
-    radius = radius or 10
-    for _, v in ipairs(workspace:GetDescendants()) do
-        if v:IsA("TouchInterest") and v.Parent and v.Parent:IsA("BasePart") then
-            if (v.Parent.Position - hrp.Position).Magnitude <= radius then
-                safeFireTouch(v.Parent)
-                task.wait(0.1)
-            end
-        end
-    end
-end
-local Tab1 = Window:CreateTab({
-    Title = "Sister",
-    Icon = "users"
+local GameTab = Window:CreateTab({
+    Title = "Game",
+    Icon = "gamepad-2"
 })
-local Tab2 = Window:CreateTab({
-    Title = "Nure's Zone",
-    Icon = "line-squiggle"
-})
-local Tab3 = Window:CreateTab({
-    Title = "Yoki Town",
-    Icon = "building-2"
-})
-local Tab4 = Window:CreateTab({
-    Title = "Broken Ship",
-    Icon = "anchor"
-})
-Tab1:Button({
-    Title = "Read The Book",
-    Description = "",
+GameTab:Button({
+    Title = "Low GFX",
     Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("Model") and v.Name == "Book" then
-                local cf, size = v:GetBoundingBox()
-                hrp.CFrame = cf + Vector3.new(0, size.Y/2 + 3, 0)
-                task.wait(0.3)
-                for _, p in ipairs(v:GetDescendants()) do
-                    if p:IsA("ProximityPrompt") then
-                        safeFirePrompt(p)
+        local DISABLE_SHADOWS = true
+        local DISABLE_POST_PROCESSING = true
+        local DISABLE_PARTICLES = true
+        local DISABLE_TEXTURES = true
+        pcall(function()
+            if DISABLE_SHADOWS then
+                Lighting.GlobalShadows = false
+                Lighting.ShadowSoftness = 0
+            end
+            if DISABLE_POST_PROCESSING then
+                for _, child in ipairs(Lighting:GetChildren()) do
+                    if child:IsA("PostEffect") or child:IsA("Atmosphere") or child:IsA("Sky") then
+                        child:Destroy()
                     end
                 end
-                break
             end
-        end
-    end
-})
-local canClickRat = true
-Tab1:Button({
-    Title = "Auto Rat Task",
-    Description = "",
-    Callback = function()
-        if not canClickRat then return end
-        canClickRat = false
-        local hrp = getHRP()
-        local char = getChar()
-        local backpack = player:WaitForChild("Backpack")
-        if not hrp or not char then
-            canClickRat = true
-            return
-        end
-        local ratModel
-        for _, a in ipairs(workspace:GetChildren()) do
-            if a.Name:match("^%{0x[%w]+%}$") then
-                for _, b in ipairs(a:GetChildren()) do
-                    if b.Name:match("^%{0x[%w]+%}$") then
-                        for _, m in ipairs(b:GetChildren()) do
-                            if m:IsA("Model") and m.PrimaryPart and m.PrimaryPart.Name == "Cube" then
-                                ratModel = m
-                                break
-                            end
-                        end
-                    end
-                    if ratModel then break end
+            if Terrain then
+                Terrain.WaterWaveSize = 0
+                Terrain.WaterWaveTransparency = 1
+                Terrain.WaterReflectance = 0
+                pcall(function()
+                    sethiddenproperty(Terrain, "Decoration", false)
+                end)
+            end
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if DISABLE_PARTICLES and (obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles")) then
+                    obj.Enabled = false
+                elseif DISABLE_TEXTURES and (obj:IsA("Decal") or obj:IsA("Texture")) then
+                    obj.Transparency = 1
+                elseif obj:IsA("BasePart") then
+                    obj.CastShadow = false
+                    obj.Material = Enum.Material.SmoothPlastic
                 end
             end
-            if ratModel then break end
-        end
-        if not ratModel then
-            Window:Notify({
-                Title = "Error",
-                Content = "Rat Model not found!",
+        end)
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Performance Booster",
+                Text = "Low GFX Applied Successfully!",
                 Duration = 3
             })
-            canClickRat = true
-            return
-        end
-        hrp.CFrame = ratModel.PrimaryPart.CFrame + Vector3.new(0, 3, 0)
-        task.wait(0.1)
-        local function hasRat()
-            for _, t in ipairs(backpack:GetChildren()) do
-                if t:IsA("Tool") and t.Name:lower():find("rat") then
-                    return true
-                end
-            end
-            for _, t in ipairs(char:GetChildren()) do
-                if t:IsA("Tool") and t.Name:lower():find("rat") then
-                    return true
-                end
-            end
-            return false
-        end
-        local timeout = 0
-        while not hasRat() and timeout < 10 do
-            for _, p in ipairs(ratModel:GetDescendants()) do
-                if p:IsA("ProximityPrompt") then
-                    safeFirePrompt(p)
-                end
-            end
-            timeout = timeout + 0.4
-            task.wait(0.3)
-        end
-        hrp.CFrame = CFrame.new(-1540.82, -30.17, -3544.40)
-        task.wait(0.3)
-        for _, p in ipairs(workspace:GetDescendants()) do
-            if p:IsA("ProximityPrompt") and p.Parent:IsA("BasePart") then
-                if (p.Parent.Position - hrp.Position).Magnitude < 10 then
-                    safeFirePrompt(p)
-                end
-            end
-        end
-        local toolName = "Poisoned Rat"
-        local tool
-        local t = 0
-        while t < 8 do
-            tool = backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)
-            if tool then
-                tool.Parent = char
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                if hum then hum:EquipTool(tool) end
-                break
-            end
-            t += 0.2
-            task.wait(0.2)
-        end
-        hrp.CFrame = CFrame.new(-1563.34, -28.91, -3408.55)
-        task.wait(0.3)
-        local dropTimeout = 0
-        while (backpack:FindFirstChild(toolName) or char:FindFirstChild(toolName)) and dropTimeout < 10 do
-            for _, p in ipairs(workspace:GetDescendants()) do
-                if p:IsA("ProximityPrompt") and p.Parent:IsA("BasePart") then
-                    if (p.Parent.Position - hrp.Position).Magnitude < 10 then
-                        safeFirePrompt(p)
-                    end
-                end
-            end
-            dropTimeout = dropTimeout + 0.1
-            task.wait(0.1)
-        end
-        hrp.CFrame = CFrame.new(-1667.52, -22.74, -3401.50)
-        task.delay(5, function()
-            canClickRat = true
         end)
     end
 })
-Tab1:Button({
-    Title = "Exit",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCFrame = CFrame.new(-1510.22, -29.25, -3418.08)
-        hrp.CFrame = targetCFrame
-        task.wait(0.3)
-        for _, prompt in ipairs(workspace:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Parent:IsA("BasePart") and (prompt.Parent.Position - hrp.Position).Magnitude < 10 then
-                safeFirePrompt(prompt)
-            end
-        end
-    end
-})
-Tab1:Button({
-    Title = "Escape Chase",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCFrame = CFrame.new(
-            -960.75, -42.4749985, -3599.55005,
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
-        )
-        hrp.CFrame = targetCFrame
-        task.wait(0.5)
-        for _, v in ipairs(workspace:GetDescendants()) do
-            if v:IsA("TouchInterest") then
-                local part = v.Parent
-                if part and part:IsA("BasePart") then
-                    safeFireTouch(part)
-                    break
-                end
-            end
-        end
-    end
-})
-Tab2:Button({
-    Title = "Auto Win",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCFrame = CFrame.new(
-            595.243896, 582.230713, -344.577911,
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
-        )
-        hrp.CFrame = targetCFrame
-        task.wait(0.3)
-        fireTouchNearby(hrp)
-    end
-})
-Tab2:Button({
-    Title = "Escape Chase",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local firstCFrame = CFrame.new(
-            3386.39282, 147.723251, 7.59275055,
-            0.999984741, -0.00552510377, 4.19676435e-05,
-            0.00552371796, 0.999855816, 0.0160555579,
-            -0.000130670203, -0.016055081, 0.999871075
-        )
-        local secondCFrame = CFrame.new(
-            3868.31982, 153.007477, 17.1698914,
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
-        )
-        hrp.CFrame = firstCFrame
-        task.wait(0.3)
-        fireTouchNearby(hrp)
-        task.wait(0.3)
-        local tweenInfo = TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-        local tween = TweenService:Create(hrp, tweenInfo, {CFrame = secondCFrame})
-        tween:Play()
-        tween.Completed:Wait()
-        fireTouchNearby(hrp)
-    end
-})
-Tab3:Button({
-    Title = "Talk",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetPos = Vector3.new(-326.42, 20.26, 3653.01)
-        hrp.CFrame = CFrame.new(targetPos)
-        task.wait(0.3)
-        for _, prompt in ipairs(workspace:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Parent:IsA("BasePart") then
-                if (prompt.Parent.Position - hrp.Position).Magnitude <= 10 then
-                    safeFirePrompt(prompt)
-                    task.wait(0.3)
-                end
-            end
-        end
-    end
-})
-Tab3:Button({
-    Title = "Paint room",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local house3Pos = Vector3.new(-200.45, 22.23, 3769.16)
-        hrp.CFrame = CFrame.new(house3Pos)
-    end
-})
-local folderName = "Collected Decals"
-local folder = workspace:FindFirstChild(folderName)
-if not folder then
-    folder = Instance.new("Folder")
-    folder.Name = folderName
-    folder.Parent = workspace
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local player = Players.LocalPlayer
+local function SafeTeleport(hrp, pos)
+    if not hrp then return end
+    hrp.Anchored = true
+    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 5, 0))
+    hrp.Velocity = Vector3.zero
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    task.wait(0.15)
+    hrp.Anchored = false
 end
-local positions = {
-    Vector3.new(-675.72, 3069.53, 5001.65),
-    Vector3.new(593.04, 3069.58, 4421.64),
-    Vector3.new(-264.07, 3069.53, 4214.51),
-    Vector3.new(-393.77, 3069.58, 3890.38),
-    Vector3.new(-7.12, 3067.82, 4712.61),
-}
-Tab3:Button({
-    Title = "Collect image",
-    Description = "Paint First Before This.",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        for _, pos in ipairs(positions) do
-            hrp.CFrame = CFrame.new(pos)
-            task.wait(1.5)
-            hrp = getHRP()
-            if not hrp then return end
-            local cloneDone = false
-            local waitTime = 0
-            local maxWaitTime = 10
-            while not cloneDone and waitTime < maxWaitTime do
-                local nearestImageMesh = nil
-                local nearestDist = math.huge
-                for _, mp in ipairs(workspace:GetDescendants()) do
-                    if mp:IsA("MeshPart") and mp.Name == "Image" then
-                        local dist = (mp.Position - pos).Magnitude
-                        if dist < 30 and dist < nearestDist then
-                            nearestImageMesh = mp
-                            nearestDist = dist
-                        end
-                    end
-                end
-                if nearestImageMesh then
-                    local alreadyCloned = false
-                    for _, clonedMesh in ipairs(folder:GetChildren()) do
-                        if clonedMesh:IsA("MeshPart")
-                            and clonedMesh.Name == nearestImageMesh.Name
-                            and (clonedMesh.Position - nearestImageMesh.Position).Magnitude < 1 then
-                            alreadyCloned = true
-                            break
-                        end
-                    end
-                    if not alreadyCloned then
-                        local clone = nearestImageMesh:Clone()
-                        clone.Parent = folder
-                    end
-                    cloneDone = true
-                end
-                if not cloneDone then
-                    task.wait(0.5)
-                    waitTime = waitTime + 0.5
-                end
-            end
-        end
-        Window:Notify({
-            Title = "Success",
-            Content = "Collected Image MeshParts!",
-            Duration = 3
-        })
-    end
+local function SafeTween(hrp, pos)
+    if not hrp then return end
+    hrp.Anchored = true
+    TweenService:Create(
+        hrp,
+        TweenInfo.new(2.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+        { CFrame = CFrame.new(pos + Vector3.new(0, 5, 0)) }
+    ):Play()
+    task.wait(2.6)
+    hrp.Anchored = false
+end
+local Control1 = Window:CreateTab({ Title = "Control 1", Icon = "Book" })
+local Control2 = Window:CreateTab({ Title = "Control 2", Icon = "Book" })
+local Control3 = Window:CreateTab({ Title = "Control 3", Icon = "Book" })
+local Control4 = Window:CreateTab({ Title = "Control 4", Icon = "Book" })
+local JigokuSection = Control1:SectionUI({
+    Title = "Jigoku",
+    Open = false
 })
-Tab3:Button({
-    Title = "Get key",
+JigokuSection:Button({
+    Title = "Jigoku Check",
     Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCFrame = CFrame.new(
-            -401.576477, 3068.81299, 3863.99707,
-            0.247046828, 0, 0.969003558,
-            0, 1, 0,
-            -0.969003558, 0, 0.247046828
-        )
-        hrp.CFrame = targetCFrame
-        task.wait(0.3)
-        for _, prompt in ipairs(workspace:GetDescendants()) do
-            if prompt:IsA("ProximityPrompt") and prompt.Parent:IsA("MeshPart") then
-                if (prompt.Parent.Position - hrp.Position).Magnitude <= 10 then
-                    safeFirePrompt(prompt)
-                    task.wait(0.3)
-                end
-            end
-        end
-    end
-})
-Tab3:Button({
-    Title = "Teleport room candle",
-    Callback = function()
-        local hrp = getHRP()
-        if hrp then
-            hrp.CFrame = CFrame.new(-386.92, 19.30, 3781.05)
-        end
-    end
-})
-Tab3:Button({
-    Title = "Auto lights up",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local cloneFolder = workspace:FindFirstChild("Collected Decals")
-        if not cloneFolder then
+        local npc = workspace:FindFirstChild("IdleNPC")
+        if npc then
             Window:Notify({
-                Title = "Error",
-                Content = "Collect Images First!",
-                Duration = 3
+                Title = "Jigoku Check",
+                Content = "Jigoku is here",
+                Duration = 4
             })
-            return
-        end
-        local collectedTextureIDs = {}
-        local foundCount = 0
-        for _, meshPart in ipairs(cloneFolder:GetChildren()) do
-            local decal = meshPart:FindFirstChildOfClass("Decal")
-            if decal and decal.Texture ~= "" then
-                collectedTextureIDs[decal.Texture] = true
-                foundCount = foundCount + 1
-            end
-        end
-        if foundCount == 0 then
-            Window:Notify({
-                Title = "Error",
-                Content = "No collected images found in folder!",
-                Duration = 3
-            })
-            return
-        end
-        local matchedCandles = {}
-        for _, model in ipairs(workspace:GetDescendants()) do
-            local nameAsNum = tonumber(model.Name)
-            if model:IsA("Model") and nameAsNum and nameAsNum >= 1 and nameAsNum <= 9 then
-                local imagePart = model:FindFirstChild("Image") or model:FindFirstChildOfClass("MeshPart")
-                if imagePart then
-                    local decal = imagePart:FindFirstChildOfClass("Decal")
-                    if decal and collectedTextureIDs[decal.Texture] then
-                        table.insert(matchedCandles, imagePart)
-                    end
-                end
-            end
-        end
-        for _, imagePart in ipairs(matchedCandles) do
-            hrp.Anchored = false
-            hrp.CFrame = imagePart.CFrame + Vector3.new(0, 3, 0)
-            task.wait(0.2)
-            for i = 1, 5 do
-                for _, prompt in ipairs(workspace:GetDescendants()) do
-                    if prompt:IsA("ProximityPrompt") and prompt.Parent and prompt.Parent:IsA("BasePart") then
-                        local dist = (prompt.Parent.Position - imagePart.Position).Magnitude
-                        if dist <= 12 then
-                            safeFirePrompt(prompt)
-                        end
-                    end
-                end
-                task.wait(0.016)
-            end
-        end
-        hrp.Anchored = false
-        local finalPos = CFrame.new(150.69, 3072.50, 3868.33)
-        hrp.CFrame = finalPos
-    end
-})
-Tab3:Button({
-    Title = "Bring orb",
-    Description = "",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetOrb = nil
-        for _, desc in ipairs(workspace:GetDescendants()) do
-            if desc.Name == "Orb" and desc:IsA("BasePart") then
-                targetOrb = desc
-                break
-            end
-        end
-        if targetOrb then
-            hrp.CFrame = targetOrb.CFrame
-            task.wait(0.5)
-            local prompt = targetOrb:FindFirstChildOfClass("ProximityPrompt")
-            if prompt then
-                safeFirePrompt(prompt)
-            end
-            task.wait(0.3)
         else
+            Window:Notify({
+                Title = "Jigoku Check",
+                Content = "Jigoku is not here",
+                Duration = 4
+            })
         end
-        local targetPos = Vector3.new(-326.42, 20.26, 3653.01)
-        hrp.CFrame = CFrame.new(targetPos)
-        task.wait(0.5)
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                local parentPart = obj.Parent
-                if parentPart and parentPart:IsA("BasePart") then
-                    local distance = (hrp.Position - parentPart.Position).Magnitude
-                    if distance <= 10 then
-                        safeFirePrompt(obj)
-                        task.wait(0.1)
+    end
+})
+JigokuSection:Button({
+    Title = "Talk To Red Guy",
+    Callback = function()
+        local npc = workspace:FindFirstChild("IdleNPC")
+        if not npc then
+            Window:Notify({
+                Title = "Error",
+                Content = "Jigoku is not here",
+                Duration = 4
+            })
+            return
+        end
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        SafeTeleport(hrp, Vector3.new(310.4, 3.2, 322.7))
+        task.wait(0.3)
+        for _, prompt in ipairs(npc:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                fireproximityprompt(prompt)
+            end
+        end
+        task.wait(0.016)
+        for _, prompt in ipairs(npc:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") then
+                fireproximityprompt(prompt)
+            end
+        end
+    end
+})
+Control1:Section("The House of Death Stage")
+Control1:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.75)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control1:Section("Hotel Stage")
+Control1:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp1 = Workspace.GroupTP:FindFirstChild("Touch2")
+        local chk = Workspace:GetChildren()[2651]
+        local dst = Workspace:GetChildren()[57].jumpscarepopupheh.bOO
+        if tp1 and chk and dst then
+            task.wait(0.75)
+            SafeTeleport(hrp, tp1.Position)
+            repeat
+                task.wait(0.25)
+                hrp.Velocity = Vector3.zero
+                hrp.AssemblyLinearVelocity = Vector3.zero
+            until (hrp.Position - chk.Position).Magnitude < 15
+            task.wait(0.25)
+            TweenService:Create(
+                hrp,
+                TweenInfo.new(2.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out),
+                { CFrame = CFrame.new(dst.Position + Vector3.new(0, 5, 0)) }
+            ):Play()
+        end
+    end
+})
+Control2:Section("Imperial Palace Stage")
+Control2:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.25)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control2:Section("Realm of the Forgotten Stage")
+Control2:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.25)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control2:Section("Labyrinth Stage")
+Control2:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        SafeTeleport(hrp, Vector3.new(881, 73, -354))
+    end
+})
+Control3:Section("The Looping Minka Stage")
+Control3:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.25)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control3:Section("The Sakura Swamp Stage")
+Control3:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.25)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control3:Section("The Indigent Family's Minka Stage")
+Control3:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        if Workspace:FindFirstChild("Teleporters3") and Workspace:FindFirstChild("Teleporters2") and Workspace:FindFirstChild("FinalCutscene") then
+            SafeTeleport(hrp, Workspace.Teleporters3.Touch.Position)
+            repeat task.wait(5)
+            until (hrp.Position - Workspace.Teleporters3.Point.Position).Magnitude < 20
+            task.wait(0.5)
+            SafeTween(hrp, Workspace.Teleporters2.Touch.Position)
+            repeat task.wait(0.1)
+            until (hrp.Position - Workspace.Teleporters2.Point.Position).Magnitude < 20
+            task.wait(0.5)
+            SafeTween(hrp, Workspace.FinalCutscene.Door.Position)
+        end
+    end
+})
+Control4:Section("The House & The Bloody Swamp Stage")
+Control4:Button({
+    Title = "Auto Win",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+        local tp = Workspace:FindFirstChild("Game Teleporter")
+        if tp then
+            task.wait(0.25)
+            SafeTeleport(hrp, tp.Position)
+        end
+    end
+})
+Control4:Section("La Quinta High School Stage")
+Control4:Button({
+    Title = "Auto Butterfly",
+    Callback = function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local HRP = character:WaitForChild("HumanoidRootPart", 3)
+        if not HRP then return end
+        local folder = Workspace:FindFirstChild("Butterflies")
+        if not folder then return end
+        for _, v in ipairs(folder:GetChildren()) do
+            if v:IsA("Model") or v:IsA("BasePart") then
+                local part = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    HRP.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+                    task.wait(0.25)
+                    for _, d in ipairs(v:GetDescendants()) do
+                        if d:IsA("ProximityPrompt") then
+                            fireproximityprompt(d)
+                        end
                     end
                 end
             end
         end
     end
 })
-Tab4:Button({
-    Title = "Enter to The Ship",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCFrame = CFrame.new(
-            -1248.15002, 86.0981903, 6297.76123,
-            1, 0, 0,
-            0, 1, 0,
-            0, 0, 1
-        )
-        hrp.CFrame = targetCFrame
-        task.wait(0.4)
-        local char = player.Character
-        if not char then return end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if not root then return end
-        for _, touch in ipairs(workspace:GetDescendants()) do
-            if touch:IsA("TouchTransmitter")
-                and touch.Parent
-                and touch.Parent:IsA("BasePart") then
-                if (touch.Parent.Position - root.Position).Magnitude <= 10 then
-                    safeFireTouch(touch.Parent)
-                    break
-                end
-            end
-        end
-    end
-})
-Tab4:Button({
-    Title = "Auto Candles",
-    Description = "Look down before click.",
+Control4:Section("The Cursed Forest Stage")
+Control4:Button({
+    Title = "Auto Cursed Items",
     Callback = function()
         local Players = game:GetService("Players")
         local player = Players.LocalPlayer
         local character = player.Character or player.CharacterAdded:Wait()
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        if not hrp then
-            Window:Notify({
-                Title = "Error",
-                Content = "HumanoidRootPart not found!",
-                Duration = 3
-            })
-            return
-        end
-        local originalCFrame = hrp.CFrame
-        local candleTargets = {}
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("ProximityPrompt") then
-                if obj.ObjectText == "Candle" or obj.Name == "{0x498599697431}" then
-                    local parentPart = obj.Parent
-                    if parentPart and parentPart:IsA("BasePart") then
-                        table.insert(candleTargets, {
-                            Part = parentPart,
-                            Prompt = obj
-                        })
-                    end
-                end
-            end
-        end
-        if #candleTargets == 0 then
-            Window:Notify({
-                Title = "Error",
-                Content = "No candles found!",
-                Duration = 3
-            })
-            return
-        end
-        Window:Notify({
-            Title = "Candle TP",
-            Content = "Found " .. #candleTargets .. " candle(s)!",
-            Duration = 2
-        })
-        local function getNearbyHumanoidModel(targetPart)
-            local targetPosition = targetPart.Position
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") then
-                    local humanoid = obj:FindFirstChildOfClass("Humanoid")
-                    local rootPart = obj:FindFirstChild("HumanoidRootPart")
-                    if humanoid and rootPart then
-                        if obj ~= character then
-                            local distance = (rootPart.Position - targetPosition).Magnitude
-                            if distance <= 29 then
-                                return obj
+        local HRP = character:WaitForChild("HumanoidRootPart", 3)
+        if not HRP then return end
+        local itemsFolder = workspace:FindFirstChild("GameInfo") and workspace.GameInfo:FindFirstChild("PuzzleItems")
+        if itemsFolder then
+            for _, v in ipairs(itemsFolder:GetChildren()) do
+                if v:IsA("Model") or v:IsA("BasePart") then
+                    local part = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart")
+                    if part then
+                        HRP.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+                        task.wait(0.5)
+                        for _, d in ipairs(v:GetDescendants()) do
+                            if d:IsA("ProximityPrompt") then
+                                pcall(function()
+                                    d.HoldDuration = 0
+                                    fireproximityprompt(d, 0)
+                                end)
+                                task.wait(0.016)
                             end
                         end
                     end
                 end
             end
-            return nil
         end
-        task.spawn(function()
-            for _, candle in ipairs(candleTargets) do
-                if not hrp or not hrp.Parent then
-                    break
-                end
-                local targetPart = candle.Part
-                local prompt = candle.Prompt
-                if not targetPart or not targetPart.Parent then
-                    continue
-                end
-                if not prompt or not prompt.Parent then
-                    continue
-                end
-                local nearbyHumanoid = getNearbyHumanoidModel(targetPart)
-                while nearbyHumanoid and nearbyHumanoid.Parent do
-                    hrp.Anchored = false
-                    if hrp and hrp.Parent then
-                        hrp.CFrame = originalCFrame
-                    end
-                    task.wait(0.5)
-                    nearbyHumanoid = getNearbyHumanoidModel(targetPart)
-                end
-                if getNearbyHumanoidModel(targetPart) then
-                    hrp.Anchored = false
-                    if hrp and hrp.Parent then
-                        hrp.CFrame = originalCFrame
-                    end
-                    continue
-                end
-                hrp.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
-                task.wait(0.2)
-                if getNearbyHumanoidModel(targetPart) then
-                    hrp.Anchored = false
-                    if hrp and hrp.Parent then
-                        hrp.CFrame = originalCFrame
-                    end
-                    continue
-                end
-                hrp.Anchored = true
-                if prompt.Enabled then
-                    local holdDuration = prompt.HoldDuration
-                    prompt:InputHoldBegin()
-                    if holdDuration > 0 then
-                        task.wait(holdDuration)
-                    else
-                        task.wait(0.1)
-                    end
-                    prompt:InputHoldEnd()
-                    task.wait(0.3)
-                end
-                hrp.Anchored = false
-                task.wait(0.1)
+        local well = workspace:FindFirstChild("Well")
+        if well then
+            local wellPart = well:IsA("BasePart") and well or well:FindFirstChildWhichIsA("BasePart")
+            if wellPart then
+                HRP.CFrame = wellPart.CFrame + Vector3.new(0, 3, 0)
+                task.wait(0.5)
             end
-            hrp.Anchored = false
-            task.wait(0.1)
-            if hrp and hrp.Parent then
-                hrp.CFrame = originalCFrame
+            for i = 1, 6 do
+                for _, p in ipairs(well:GetDescendants()) do
+                    if p:IsA("ProximityPrompt") then
+                        pcall(function()
+                            p.HoldDuration = 0
+                            fireproximityprompt(p, 0)
+                        end)
+                        task.wait(0.016)
+                    end
+                end
             end
-            Window:Notify({
-                Title = "Done",
-                Content = "Finished Candles!",
-                Duration = 3
-            })
+        end
+    end
+})
+Control4:Section("Saigomo's Lair")
+local autoEquipEnabled = false
+local function getKatana()
+    return player.Backpack:FindFirstChild("Katana") or (player.Character and player.Character:FindFirstChild("Katana"))
+end
+local function isKatanaEquipped()
+    local character = player.Character
+    if not character then return false end
+    return character:FindFirstChild("Katana") ~= nil
+end
+local function equipKatana()
+    if not isKatanaEquipped() then
+        local katana = getKatana()
+        if katana and player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid:EquipTool(katana)
+            end
+        end
+    end
+end
+local autoEquipTask=nil
+Control4:Toggle({
+    Title = "Auto Equip Katana",
+    Default = false,
+    Callback = function(state)
+        autoEquipEnabled = state
+        if not state then
+            if autoEquipTask then pcall(function() task.cancel(autoEquipTask) end) autoEquipTask=nil end
+            return
+        end
+        if autoEquipTask then return end
+        autoEquipTask = task.spawn(function()
+            while autoEquipEnabled do
+                equipKatana()
+                task.wait(1)
+            end
+            autoEquipTask=nil
         end)
     end
 })
-Tab4:Button({
-    Title = "End Vent Chase",
-    Callback = function()
-        local player = game:GetService("Players").LocalPlayer
-        local character = player.Character or player.CharacterAdded:Wait()
-        local hrp = character:FindFirstChild("HumanoidRootPart")
-        local tweenService = game:GetService("TweenService")
-        if not hrp then return end
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = CFrame.new(-6318.81, 419.04, 6261.62)
-        task.wait(0.1)
-        local targetCFrame = CFrame.new(
-            -6318.50488, 418.510345, 6367.32715,
-            -1, 8.63294626e-05, -0.000172640299,
-             8.63145615e-05, 1, 8.63294626e-05,
-             0.000172647749, 8.63145615e-05, -1
-        )
-        local distance = (hrp.Position - targetCFrame.Position).Magnitude
-        local speed = 50
-        local duration = math.clamp(distance / speed, 0.5, 3)
-        local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-        local tween = tweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
-        tween:Play()
-        tween.Completed:Wait()
-    end
-})
-Tab4:Button({
-    Title = "Finish",
-    Callback = function()
-        local hrp = getHRP()
-        if not hrp then return end
-        local targetCF = CFrame.new(
-            -9612.39062, 450.222809, 7150.53125,
-             0.999415755, -0.0341785066, -3.39340841e-05,
-             0.0341785066,  0.999413788,  0.00198511523,
-            -3.39340841e-05, -0.00198511523, 0.999998033
-        )
-        hrp.CFrame = targetCF
-        task.wait(0.3)
-        local nearest, dist = nil, math.huge
-        for _, part in ipairs(workspace:GetDescendants()) do
-            if part:IsA("BasePart") then
-                local tt = part:FindFirstChildOfClass("TouchTransmitter")
-                if tt then
-                    local d = (part.Position - hrp.Position).Magnitude
-                    if d < dist then
-                        dist = d
-                        nearest = part
+local autoClickTask=nil
+Control4:Toggle({
+    Title = "Auto Click Katana",
+    Default = false,
+    Callback = function(state)
+        getgenv().AutoKatana = state
+        if not state then
+            if autoClickTask then pcall(function() task.cancel(autoClickTask) end) autoClickTask=nil end
+            return
+        end
+        if autoClickTask then return end
+        autoClickTask = task.spawn(function()
+            while getgenv().AutoKatana do
+                local char = player.Character
+                if char then
+                    local katana = char:FindFirstChild("Katana")
+                    if katana and katana:IsA("Tool") then
+                        pcall(function() katana:Activate() end)
                     end
                 end
+                task.wait(0.1)
             end
+            autoClickTask=nil
+        end)
+    end
+})
+local heartsEnabled = false
+local floatTask
+local FLOAT_HEIGHT = 35
+local Hearts = {
+    {
+        get = function() return workspace:FindFirstChild("GameHearts") and workspace.GameHearts:GetChildren()[3] end,
+        position = Vector3.new(2808, 105, 2431)
+    },
+    {
+        get = function() return workspace:FindFirstChild("GameHearts") and workspace.GameHearts:FindFirstChild("Heart") end,
+        position = Vector3.new(3215, 115, 2187)
+    },
+    {
+        get = function() return workspace:FindFirstChild("GameHearts") and workspace.GameHearts:GetChildren()[2] end,
+        position = Vector3.new(2598, 120, 2425)
+    }
+}
+local function startFloating(position)
+    local char = player.Character or player.CharacterAdded:Wait()
+    local rootPart = char:WaitForChild("HumanoidRootPart")
+    floatTask = task.spawn(function()
+        while heartsEnabled and rootPart do
+            rootPart.Velocity = Vector3.zero
+            rootPart.AssemblyLinearVelocity = Vector3.zero
+            rootPart.CFrame = CFrame.new(position + Vector3.new(0, FLOAT_HEIGHT, 0))
+            task.wait(0.05)
         end
-        if nearest then
-            safeFireTouch(nearest)
+    end)
+end
+local function stopFloating()
+    if floatTask then pcall(function() task.cancel(floatTask) end) floatTask = nil end
+    local char = player.Character
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        rootPart.Velocity = Vector3.zero
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+    end
+end
+local function isDestroyed(heart)
+    return heart and heart:FindFirstChild("Destroyed")
+end
+local function waitForDestroyed(heart)
+    if not heart or isDestroyed(heart) then return end
+    heart:WaitForChild("Destroyed")
+end
+local function killHearts()
+    for _, heartData in ipairs(Hearts) do
+        if not heartsEnabled then break end
+        local heart = heartData.get()
+        if heart and not isDestroyed(heart) then
+            startFloating(heartData.position)
+            waitForDestroyed(heart)
+            stopFloating()
+            task.wait(0.2)
+        end
+    end
+    stopFloating()
+    heartsEnabled = false
+end
+Control4:Toggle({
+    Title = "Kill All Sama's Heart",
+    Default = false,
+    Callback = function(state)
+        heartsEnabled = state
+        if heartsEnabled then
+            task.spawn(killHearts)
+        else
+            stopFloating()
+        end
+    end
+})
+local saigomoEnabled = false
+local followTask
+local hitboxTask
+local SAIGOMO_FLOAT_HEIGHT = 27
+local DESIRED_SIZE = Vector3.new(150, 21, 21)
+local function getSaigomo()
+    return workspace:FindFirstChild("BossBattle") and workspace.BossBattle:FindFirstChild("Saigomo")
+end
+local function getSaigomoPosition()
+    local saigomo = getSaigomo()
+    if not saigomo then return end
+    if saigomo.PrimaryPart then
+        return saigomo.PrimaryPart.Position
+    end
+    local part = saigomo:FindFirstChildWhichIsA("BasePart")
+    return part and part.Position
+end
+local function enlargeHitbox()
+    local saigomo = getSaigomo()
+    if saigomo then
+        local hitbox = saigomo:FindFirstChild("SpiderHitbox")
+        if hitbox and hitbox:IsA("BasePart") then
+            hitbox.Size = DESIRED_SIZE
+            hitbox.Transparency = 1
+        end
+    end
+end
+local function startFollowSaigomo()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    hitboxTask = task.spawn(function()
+        while saigomoEnabled do
+            enlargeHitbox()
+            task.wait(0.2)
+        end
+    end)
+    followTask = task.spawn(function()
+        while saigomoEnabled do
+            if hrp then
+                local pos = getSaigomoPosition()
+                if pos then
+                    hrp.CFrame = CFrame.new(pos + Vector3.new(0, SAIGOMO_FLOAT_HEIGHT, 0))
+                end
+            end
+            task.wait(0.05)
+        end
+    end)
+end
+local function stopFollowSaigomo()
+    if followTask then pcall(function() task.cancel(followTask) end) followTask = nil end
+    if hitboxTask then pcall(function() task.cancel(hitboxTask) end) hitboxTask = nil end
+end
+Control4:Toggle({
+    Title = "Kill Saigomo",
+    Default = false,
+    Callback = function(state)
+        saigomoEnabled = state
+        if saigomoEnabled then
+            startFollowSaigomo()
+        else
+            stopFollowSaigomo()
         end
     end
 })

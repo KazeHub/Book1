@@ -1,7 +1,6 @@
 local KazeUI = KazeUI or loadstring(game:HttpGet(
     "https://raw.githubusercontent.com/KazeHub/UI/refs/heads/main/libraryUI.txt"
 ))()
-
 local Window = KazeUI:CreateWindow({
     Title = "The Mimic",
     Author = "Kaze",
@@ -11,107 +10,96 @@ local Window = KazeUI:CreateWindow({
     Theme = "Obsidian",
     GlowStyle = "Cycle",
     GlowColor = true,
-    
     PopupTitle = "Welcome to Kaze Hub!",
-    PopupContent = "Thank you for using my optimized script! If you found any bug, please report it to the discord.",
+    PopupContent = "Join Discord Server. If you found any bug please, report it to the Discord.",
     DiscordLink = "https://discord.gg/DKGRny4DD",
-
     OpenButton = {
         Icon = "79414074886215",
         Hidable = false,
         Size = UDim2.fromOffset(60, 60)
     },
 })
-
 local Player = Window:CreateTab({
     Title = "Player",
     Icon = "user"
 })
-
 local Workspace = (typeof(cloneref) == "function" and cloneref(game:GetService("Workspace"))) or game:GetService("Workspace")
 local Lighting = (typeof(cloneref) == "function" and cloneref(game:GetService("Lighting"))) or game:GetService("Lighting")
 local RunService = (typeof(cloneref) == "function" and cloneref(game:GetService("RunService"))) or game:GetService("RunService")
 local Players = (typeof(cloneref) == "function" and cloneref(game:GetService("Players"))) or game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-
--- Global Character & Root Cache Tracking
-local CachedCharacter = nil
-local CachedHumanoid = nil
-local CachedRootPart = nil
-
-local function updateCharacterCache(char)
-    CachedCharacter = char
-    if char then
-        CachedHumanoid = char:FindFirstChildOfClass("Humanoid")
-        CachedRootPart = char:FindFirstChild("HumanoidRootPart")
-    else
-        CachedHumanoid = nil
-        CachedRootPart = nil
-    end
+local CharCache={Character=nil,Humanoid=nil,HumanoidRootPart=nil,BaseParts={}}
+local function refreshCharCache(force)
+local char=LocalPlayer.Character
+if not force and char==CharCache.Character and CharCache.HumanoidRootPart and CharCache.HumanoidRootPart.Parent then
+return CharCache.Character,CharCache.Humanoid,CharCache.HumanoidRootPart
 end
-
-updateCharacterCache(LocalPlayer.Character)
-LocalPlayer.CharacterAdded:Connect(updateCharacterCache)
-
-local function getHRP()
-    local char = LocalPlayer.Character
-    if char then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then return hrp end
-    end
-    return CachedRootPart
+CharCache.Character=char
+CharCache.Humanoid=char and char:FindFirstChildOfClass("Humanoid") or nil
+CharCache.HumanoidRootPart=char and char:FindFirstChild("HumanoidRootPart") or nil
+CharCache.BaseParts={}
+if char then
+for _,part in ipairs(char:GetDescendants()) do
+if part:IsA("BasePart") then table.insert(CharCache.BaseParts,part) end
 end
-
+end
+return CharCache.Character,CharCache.Humanoid,CharCache.HumanoidRootPart
+end
+LocalPlayer.CharacterAdded:Connect(function()
+task.defer(function() task.wait(0.05) refreshCharCache(true) end)
+end)
+LocalPlayer.CharacterRemoving:Connect(function()
+CharCache.Character=nil CharCache.Humanoid=nil CharCache.HumanoidRootPart=nil CharCache.BaseParts={}
+end)
+refreshCharCache(true)
 Player:Section("Client")
-
 local InstantPromptEnabled = false
-local promptConnection
-
+local promptTask = nil
+local originalHoldDurations = {}
 Player:Toggle({
     Title = "Instant Prompt",
     Default = false,
     Callback = function(s)
         InstantPromptEnabled = s
-        
-        if promptConnection then
-            promptConnection:Disconnect()
-            promptConnection = nil
-        end
-        
+        if promptTask then task.cancel(promptTask) promptTask = nil end
         if InstantPromptEnabled then
+            originalHoldDurations = {}
             for _, prompt in ipairs(Workspace:GetDescendants()) do
                 if prompt:IsA("ProximityPrompt") then
+                    originalHoldDurations[prompt] = prompt.HoldDuration
                     prompt.HoldDuration = 0
                 end
             end
-            
-            promptConnection = Workspace.DescendantAdded:Connect(function(descendant)
-                if descendant:IsA("ProximityPrompt") then
-                    descendant.HoldDuration = 0
+            promptTask = task.spawn(function()
+                while InstantPromptEnabled do
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if prompt:IsA("ProximityPrompt") and prompt.HoldDuration ~= 0 then
+                            if not originalHoldDurations[prompt] then originalHoldDurations[prompt] = prompt.HoldDuration end
+                            prompt.HoldDuration = 0
+                        end
+                    end
+                    task.wait(0.5)
                 end
             end)
+        else
+            for p, orig in pairs(originalHoldDurations or {}) do
+                if p and p.Parent then p.HoldDuration = orig end
+            end
+            originalHoldDurations = {}
         end
     end
 })
-
 local FB_ENABLED = false
-local fbConnection
 local origAmbient = Lighting.Ambient
 local origOutdoorAmbient = Lighting.OutdoorAmbient
 local origBrightness = Lighting.Brightness
 local origClockTime = Lighting.ClockTime
 local origShadows = Lighting.GlobalShadows
-
 Player:Toggle({
     Title = "FullBright",
     Default = false,
     Callback = function(s)
         FB_ENABLED = s
-        if fbConnection then 
-            fbConnection:Disconnect() 
-            fbConnection = nil
-        end
-        
         if FB_ENABLED then
             local function applyBright()
                 Lighting.Ambient = Color3.fromRGB(178, 178, 178)
@@ -120,9 +108,7 @@ Player:Toggle({
                 Lighting.ClockTime = 14
                 Lighting.GlobalShadows = false
             end
-            
             applyBright()
-            fbConnection = Lighting.Changed:Connect(applyBright)
         else
             Lighting.Ambient = origAmbient
             Lighting.OutdoorAmbient = origOutdoorAmbient
@@ -132,57 +118,39 @@ Player:Toggle({
         end
     end
 })
-
 local NoclipEnabled = false
-local noclipConnection
-local cachedPartsList = {}
-
-local function updateNoclipCache(char)
-    cachedPartsList = {}
-    if char then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then
-                table.insert(cachedPartsList, part)
-            end
-        end
-    end
-end
-
+local noclipTask
 Player:Toggle({
     Title = "Noclip",
     Default = false,
     Callback = function(s)
         NoclipEnabled = s
-        
-        if noclipConnection then
-            noclipConnection:Disconnect()
-            noclipConnection = nil
-        end
-        
+        if noclipTask then task.cancel(noclipTask) noclipTask = nil end
         if NoclipEnabled then
-            updateNoclipCache(LocalPlayer.Character)
-            local charConn
-            if LocalPlayer.Character then
-                charConn = LocalPlayer.Character.DescendantAdded:Connect(function()
-                    updateNoclipCache(LocalPlayer.Character)
-                end)
-            end
-            
-            noclipConnection = RunService.Stepped:Connect(function()
-                for _, part in ipairs(cachedPartsList) do
-                    if part and part.Parent then
-                        part.CanCollide = false
+            refreshCharCache(true)
+            noclipTask = task.spawn(function()
+                while NoclipEnabled do
+                    refreshCharCache()
+                    for i=1,#CharCache.BaseParts do
+                        local part=CharCache.BaseParts[i]
+                        if part and part.Parent and part.CanCollide then part.CanCollide=false end
                     end
+                    task.wait(0.1)
                 end
             end)
+        else
+            local char=LocalPlayer.Character
+            if char then
+                for _,part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide=true end
+                end
+            end
         end
     end
 })
-
 local TPWalkSpeed = 1
 local TPWalkEnabled = false
-local tpWalkConnection
-
+local tpWalkTask
 Player:Slider({
     Title = "TP Walk Speed",
     Min = 1,
@@ -192,38 +160,28 @@ Player:Slider({
         TPWalkSpeed = v
     end
 })
-
 Player:Toggle({
     Title = "Enable TP Walk",
     Default = false,
     Callback = function(s)
         TPWalkEnabled = s
-
-        if tpWalkConnection then
-            tpWalkConnection:Disconnect()
-            tpWalkConnection = nil
-        end
-
+        if tpWalkTask then task.cancel(tpWalkTask) tpWalkTask = nil end
         if TPWalkEnabled then
-            tpWalkConnection = RunService.Heartbeat:Connect(function(dt)
-                local character = LocalPlayer.Character
-                if character then
-                    local hrp = character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    
-                    if hrp and humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                        hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (TPWalkSpeed * 0.15))
+            tpWalkTask = task.spawn(function()
+                while TPWalkEnabled do
+                    local _,humanoid,hrp=refreshCharCache()
+                    if hrp and humanoid and humanoid.MoveDirection.Magnitude>0 then
+                        hrp.CFrame=hrp.CFrame+(humanoid.MoveDirection*(TPWalkSpeed*0.35))
                     end
+                    task.wait(0.03)
                 end
             end)
         end
     end
 })
-
 local TargetFlySpeed = 16
 local FLY_ENABLED = false
-local flyConnection
-
+local flyTask = nil
 Player:Slider({
     Title = "Fly Speed",
     Min = 16,
@@ -233,120 +191,92 @@ Player:Slider({
         TargetFlySpeed = val
     end
 })
-
 Player:Toggle({
     Title = "Enable Fly",
     Default = false,
     Callback = function(state)
         FLY_ENABLED = state
-        
-        local function stopFly()
-            if flyConnection then 
-                flyConnection:Disconnect() 
-                flyConnection = nil 
-            end
-            
-            local character = LocalPlayer.Character
-            local hrp = character and character:FindFirstChild("HumanoidRootPart")
-            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-            
-            if humanoid then
-                humanoid.PlatformStand = false
-            end
-            if hrp then
-                hrp.Anchored = false
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                hrp.AssemblyLinearVelocity = Vector3.zero
-            end
+        if flyTask then task.cancel(flyTask) flyTask = nil end
+        local character = LocalPlayer.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.PlatformStand = false end
+        if hrp then
+            hrp.Anchored = false
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hrp.AssemblyLinearVelocity = Vector3.zero
         end
-        
-        stopFly()
-        
         if FLY_ENABLED then
             local camera = Workspace.CurrentCamera
-            
-            flyConnection = RunService.RenderStepped:Connect(function(dt)
-                local character = LocalPlayer.Character
-                local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                
-                if hrp and humanoid then
-                    local moveDir = humanoid.MoveDirection
-                    
-                    if moveDir.Magnitude > 0 then
-                        hrp.Anchored = false
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        
-                        local cameraCF = camera.CFrame
-                        local relativeVector = cameraCF:VectorToObjectSpace(moveDir)
-                        local flyDirection = (cameraCF.RightVector * relativeVector.X) + (cameraCF.LookVector * -relativeVector.Z)
-                        
-                        if flyDirection.Magnitude > 0 then
-                            flyDirection = flyDirection.Unit
+            flyTask = task.spawn(function()
+                while FLY_ENABLED do
+                    local _,humanoid,hrp=refreshCharCache()
+                    if hrp and humanoid then
+                        local moveDir=humanoid.MoveDirection
+                        if moveDir.Magnitude>0 then
+                            hrp.Anchored=false
+                            hrp.AssemblyLinearVelocity=Vector3.zero
+                            hrp.AssemblyAngularVelocity=Vector3.zero
+                            local cameraCF=camera.CFrame
+                            local relativeVector=cameraCF:VectorToObjectSpace(moveDir)
+                            local flyDirection=(cameraCF.RightVector*relativeVector.X)+(cameraCF.LookVector*-relativeVector.Z)
+                            if flyDirection.Magnitude>0 then flyDirection=flyDirection.Unit end
+                            hrp.CFrame=CFrame.lookAlong(hrp.Position,flyDirection)+(flyDirection*(TargetFlySpeed*0.03))
+                        else
+                            hrp.AssemblyLinearVelocity=Vector3.zero
+                            hrp.AssemblyAngularVelocity=Vector3.zero
+                            hrp.Anchored=true
                         end
-                        
-                        hrp.CFrame = CFrame.lookAlong(hrp.Position, flyDirection) + (flyDirection * (TargetFlySpeed * dt))
-                    else
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.AssemblyAngularVelocity = Vector3.zero
-                        hrp.Anchored = true
                     end
+                    task.wait(0.03)
                 end
             end)
         end
     end
 })
-
 local Jigoku = Window:CreateTab({ Title = "Jigoku", Icon = "flame" })
-
 Jigoku:Section("Main")
-
 Jigoku:Button({
     Title = "Start",
     Callback = function()
         task.spawn(function()
-            local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+            local plr = Players.LocalPlayer
+            local character = plr.Character or plr.CharacterAdded:Wait()
             local hrp = character and character:FindFirstChild("HumanoidRootPart")
             if not character or not hrp then return end
-
             local touchPart = Workspace:FindFirstChild("[ID]Touch1")
             if touchPart then
                 hrp.Anchored = false
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
-                
                 local targetCF = touchPart:IsA("BasePart") and touchPart.CFrame or touchPart:GetPivot()
                 character:PivotTo(targetCF)
             end
         end)
     end
 })
-
 Jigoku:Button({
     Title = "Auto Orb",
     Callback = function()
         task.spawn(function()
-            local HRP = getHRP()
+            local plr = Players.LocalPlayer
+            local character = plr.Character or plr.CharacterAdded:Wait()
+            local HRP = character:WaitForChild("HumanoidRootPart", 3)
             if not HRP then return end
-
             local gameAI = Workspace:FindFirstChild("GameAI")
             local folder = gameAI and gameAI:FindFirstChild("Souls")
             if not folder then return end
-
             for _, v in ipairs(folder:GetChildren()) do
                 if v and v.Parent == folder and (v:IsA("Model") or v:IsA("BasePart")) then
                     local part = v:IsA("BasePart") and v or v:FindFirstChildWhichIsA("BasePart")
                     if part then
                         HRP.CFrame = part.CFrame + Vector3.new(0, 3, 0)
                         task.wait(0.25)
-
                         for _, d in ipairs(v:GetDescendants()) do
                             if d:IsA("ProximityPrompt") then
                                 fireproximityprompt(d)
                             end
                         end
-
                         local startTime = tick()
                         while v and v.Parent == folder and (tick() - startTime < 1.5) do
                             task.wait(0.05)
@@ -359,19 +289,15 @@ Jigoku:Button({
                     end
                 end
             end
-
             task.wait(0.25)
             HRP.CFrame = CFrame.new(603.6, 76.4, 495.6)
         end)
     end
 })
-
 Jigoku:Section("ESP")
-
 local shihyoshaEnabled = false
 local shihyoshaObjects = {}
 local shihyoshaConnections = {}
-
 local function clearShihyoshaESP()
     for _, obj in ipairs(shihyoshaObjects) do
         if obj and obj.Parent then pcall(function() obj:Destroy() end) end
@@ -382,7 +308,6 @@ local function clearShihyoshaESP()
     shihyoshaObjects = {}
     shihyoshaConnections = {}
 end
-
 local function getPartPosition(model)
     if not model then return nil end
     if model:IsA("BasePart") then return model.Position end
@@ -396,13 +321,10 @@ local function getPartPosition(model)
     end
     return nil
 end
-
 local function createShihyoshaESP(model)
     if not model or not model:IsA("Model") then return end
-    
     local partToAdorn = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart", true)
     if not partToAdorn then return end
-
     local highlight = Instance.new("Highlight")
     highlight.Name = "ShihyoshaHighlight"
     highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -412,7 +334,6 @@ local function createShihyoshaESP(model)
     highlight.Adornee = model
     highlight.Parent = model
     table.insert(shihyoshaObjects, highlight)
-
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "ShihyoshaBillboard"
     billboard.Size = UDim2.new(0, 150, 0, 35)
@@ -420,7 +341,6 @@ local function createShihyoshaESP(model)
     billboard.AlwaysOnTop = true
     billboard.Parent = partToAdorn
     table.insert(shihyoshaObjects, billboard)
-
     local text = Instance.new("TextLabel")
     text.BackgroundTransparency = 1
     text.Size = UDim2.new(1, 0, 1, 0)
@@ -432,9 +352,9 @@ local function createShihyoshaESP(model)
     text.Font = Enum.Font.SourceSansBold
     text.Text = "Shihyosha"
     text.Parent = billboard
-
-    local throttleTimer = 0
-    local conn = RunService.RenderStepped:Connect(function(dt)
+    local conn = nil
+    task.spawn(function()
+    while shihyoshaEnabled do
         if not shihyoshaEnabled or not model.Parent then
             pcall(function()
                 billboard:Destroy()
@@ -442,12 +362,8 @@ local function createShihyoshaESP(model)
             end)
             return
         end
-
-        throttleTimer = throttleTimer + dt
-        if throttleTimer < 0.2 then return end
-        throttleTimer = 0
-
-        local hrp = getHRP()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local targetPos = getPartPosition(model)
         if hrp and targetPos then
             local dist = (hrp.Position - targetPos).Magnitude
@@ -456,7 +372,6 @@ local function createShihyoshaESP(model)
     end)
     table.insert(shihyoshaConnections, conn)
 end
-
 Jigoku:Toggle({
     Title = "ESP Shihyosha",
     Default = false,
@@ -464,7 +379,6 @@ Jigoku:Toggle({
         shihyoshaEnabled = s
         clearShihyoshaESP()
         if not s then return end
-
         local aiContainer = Workspace:FindFirstChild("GameAI") and Workspace.GameAI:FindFirstChild("AI")
         if aiContainer then
             if aiContainer:IsA("Model") then
@@ -475,7 +389,6 @@ Jigoku:Toggle({
                         createShihyoshaESP(obj)
                     end
                 end
-
                 local conn = aiContainer.ChildAdded:Connect(function(obj)
                     if shihyoshaEnabled and obj:IsA("Model") and obj.Name ~= "AnimSaves" then
                         task.wait(0.1)
@@ -487,11 +400,9 @@ Jigoku:Toggle({
         end
     end
 })
-
 local orbsEnabled = false
 local orbsObjects = {}
 local orbsConnections = {}
-
 local function clearOrbsESP()
     for _, obj in ipairs(orbsObjects) do
         if obj and obj.Parent then pcall(function() obj:Destroy() end) end
@@ -502,19 +413,15 @@ local function clearOrbsESP()
     orbsObjects = {}
     orbsConnections = {}
 end
-
 local function createOrbESP(model)
     if not model then return end
-    
     local partToAdorn = nil
     if model:IsA("Model") then
         partToAdorn = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
     elseif model:IsA("BasePart") then
         partToAdorn = model
     end
-
     if not partToAdorn then return end
-
     local highlight = Instance.new("Highlight")
     highlight.Name = "OrbHighlight"
     highlight.FillColor = Color3.fromRGB(0, 255, 255)
@@ -524,7 +431,6 @@ local function createOrbESP(model)
     highlight.Adornee = model
     highlight.Parent = model
     table.insert(orbsObjects, highlight)
-
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "OrbBillboard"
     billboard.Size = UDim2.new(0, 150, 0, 35)
@@ -532,7 +438,6 @@ local function createOrbESP(model)
     billboard.AlwaysOnTop = true
     billboard.Parent = partToAdorn
     table.insert(orbsObjects, billboard)
-
     local text = Instance.new("TextLabel")
     text.BackgroundTransparency = 1
     text.Size = UDim2.new(1, 0, 1, 0)
@@ -544,9 +449,10 @@ local function createOrbESP(model)
     text.Font = Enum.Font.SourceSansBold
     text.Text = "Orb"
     text.Parent = billboard
-
-    local throttleTimer = 0
-    local conn = RunService.RenderStepped:Connect(function(dt)
+    local lastUpdate = 0
+    local conn = RunService.Heartbeat:Connect(function()
+        if tick() - lastUpdate < 0.4 then return end
+        lastUpdate = tick()
         if not orbsEnabled or not model.Parent then
             pcall(function()
                 billboard:Destroy()
@@ -554,12 +460,8 @@ local function createOrbESP(model)
             end)
             return
         end
-
-        throttleTimer = throttleTimer + dt
-        if throttleTimer < 0.2 then return end
-        throttleTimer = 0
-
-        local hrp = getHRP()
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local targetPos = getPartPosition(model)
         if hrp and targetPos then
             local dist = (hrp.Position - targetPos).Magnitude
@@ -568,7 +470,6 @@ local function createOrbESP(model)
     end)
     table.insert(orbsConnections, conn)
 end
-
 Jigoku:Toggle({
     Title = "ESP Orbs",
     Default = false,
@@ -576,13 +477,11 @@ Jigoku:Toggle({
         orbsEnabled = s
         clearOrbsESP()
         if not s then return end
-
         local soulsFolder = Workspace:FindFirstChild("GameAI") and Workspace.GameAI:FindFirstChild("Souls")
         if soulsFolder then
             for _, obj in ipairs(soulsFolder:GetChildren()) do
                 createOrbESP(obj)
             end
-
             local conn = soulsFolder.ChildAdded:Connect(function(obj)
                 if orbsEnabled then
                     task.wait(0.1)

@@ -3,18 +3,19 @@ local KazeUI = KazeUI or loadstring(game:HttpGet(
 ))()
 
 local Window = KazeUI:CreateWindow({
-    Title = "The Mimic",
-    Author = "Kaze",
-    Version = "Jigoku",
+    Title = "THE MIMIC",
+    Author = "KAZE",
+    Version = "JIGOKU",
     Size = UDim2.fromOffset(500, 370),
     Icon = "79414074886215",
     Theme = "Obsidian",
     GlowStyle = "Cycle",
     GlowColor = true,
-
+    
     PopupTitle = "Welcome to Kaze Hub!",
-    PopupContent = "Join Discord Server. If you found any bug please, report it to the Discord.",
+    PopupContent = "Thank you for using my script! if you found any bug, please report it to the discord.",
     DiscordLink = "https://discord.gg/DKGRny4DD",
+    YoutubeLink = "https://www.youtube.com/@Kaze_Hub",
 
     OpenButton = {
         Icon = "79414074886215",
@@ -37,45 +38,37 @@ local LocalPlayer = Players.LocalPlayer
 Player:Section("Client")
 
 local InstantPromptEnabled = false
-local promptTask = nil
-local originalHoldDurations = {}
+local promptConnection
 
 Player:Toggle({
     Title = "Instant Prompt",
     Default = false,
     Callback = function(s)
         InstantPromptEnabled = s
-
-        if promptTask then task.cancel(promptTask) promptTask = nil end
+        
+        if promptConnection then
+            promptConnection:Disconnect()
+            promptConnection = nil
+        end
+        
         if InstantPromptEnabled then
-            originalHoldDurations = {}
             for _, prompt in ipairs(Workspace:GetDescendants()) do
                 if prompt:IsA("ProximityPrompt") then
-                    originalHoldDurations[prompt] = prompt.HoldDuration
                     prompt.HoldDuration = 0
                 end
             end
-            promptTask = task.spawn(function()
-                while InstantPromptEnabled do
-                    for _, prompt in ipairs(Workspace:GetDescendants()) do
-                        if prompt:IsA("ProximityPrompt") and prompt.HoldDuration ~= 0 then
-                            if not originalHoldDurations[prompt] then originalHoldDurations[prompt] = prompt.HoldDuration end
-                            prompt.HoldDuration = 0
-                        end
-                    end
-                    task.wait(0.5)
+            
+            promptConnection = Workspace.DescendantAdded:Connect(function(descendant)
+                if descendant:IsA("ProximityPrompt") then
+                    descendant.HoldDuration = 0
                 end
             end)
-        else
-            for p, orig in pairs(originalHoldDurations or {}) do
-                if p and p.Parent then p.HoldDuration = orig end
-            end
-            originalHoldDurations = {}
         end
     end
 })
 
 local FB_ENABLED = false
+local fbConnection
 local origAmbient = Lighting.Ambient
 local origOutdoorAmbient = Lighting.OutdoorAmbient
 local origBrightness = Lighting.Brightness
@@ -87,6 +80,11 @@ Player:Toggle({
     Default = false,
     Callback = function(s)
         FB_ENABLED = s
+        if fbConnection then 
+            fbConnection:Disconnect() 
+            fbConnection = nil
+        end
+        
         if FB_ENABLED then
             local function applyBright()
                 Lighting.Ambient = Color3.fromRGB(178, 178, 178)
@@ -95,8 +93,9 @@ Player:Toggle({
                 Lighting.ClockTime = 14
                 Lighting.GlobalShadows = false
             end
-
+            
             applyBright()
+            fbConnection = Lighting.Changed:Connect(applyBright)
         else
             Lighting.Ambient = origAmbient
             Lighting.OutdoorAmbient = origOutdoorAmbient
@@ -108,40 +107,28 @@ Player:Toggle({
 })
 
 local NoclipEnabled = false
-local noclipTask
+local noclipConnection
 
 Player:Toggle({
     Title = "Noclip",
     Default = false,
     Callback = function(s)
         NoclipEnabled = s
-
-        if noclipTask then task.cancel(noclipTask) noclipTask = nil end
-
+        
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        
         if NoclipEnabled then
-            local _ncParts = {}
-            local _ncChar = nil
-            local function _ncRefresh()
-                local c = LocalPlayer.Character
-                if c == _ncChar and #_ncParts > 0 then return end
-                _ncChar = c
-                _ncParts = {}
-                if c then
-                    for _, p in ipairs(c:GetDescendants()) do
-                        if p:IsA("BasePart") then table.insert(_ncParts, p) end
+            noclipConnection = RunService.Stepped:Connect(function()
+                local character = LocalPlayer.Character
+                if character then
+                    for _, part in ipairs(character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            if part.CanCollide then part.CanCollide = false end
+                        end
                     end
-                end
-            end
-            _ncRefresh()
-            noclipTask = task.spawn(function()
-                while NoclipEnabled do
-                    local c = LocalPlayer.Character
-                    if c ~= _ncChar then _ncRefresh() end
-                    for i = 1, #_ncParts do
-                        local p = _ncParts[i]
-                        if p and p.Parent and p.CanCollide then p.CanCollide = false end
-                    end
-                    task.wait(0.1)
                 end
             end)
         end
@@ -150,7 +137,7 @@ Player:Toggle({
 
 local TPWalkSpeed = 1
 local TPWalkEnabled = false
-local tpWalkTask
+local tpWalkConnection
 
 Player:Slider({
     Title = "TP Walk Speed",
@@ -168,20 +155,21 @@ Player:Toggle({
     Callback = function(s)
         TPWalkEnabled = s
 
-        if tpWalkTask then task.cancel(tpWalkTask) tpWalkTask = nil end
+        if tpWalkConnection then
+            tpWalkConnection:Disconnect()
+            tpWalkConnection = nil
+        end
 
         if TPWalkEnabled then
-            tpWalkTask = task.spawn(function()
-                while TPWalkEnabled do
-                    local character = LocalPlayer.Character
-                    if character then
-                        local hrp = character:FindFirstChild("HumanoidRootPart")
-                        local humanoid = character:FindFirstChildOfClass("Humanoid")
-                        if hrp and humanoid and humanoid.MoveDirection.Magnitude > 0 then
-                            hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (TPWalkSpeed * 0.35))
-                        end
+            tpWalkConnection = RunService.Heartbeat:Connect(function(dt)
+                local character = LocalPlayer.Character
+                if character then
+                    local hrp = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    
+                    if hrp and humanoid and humanoid.MoveDirection.Magnitude > 0 then
+                        hrp.CFrame = hrp.CFrame + (humanoid.MoveDirection * (TPWalkSpeed * 0.15))
                     end
-                    task.wait(0.03)
                 end
             end)
         end
@@ -190,7 +178,7 @@ Player:Toggle({
 
 local TargetFlySpeed = 16
 local FLY_ENABLED = false
-local flyTask = nil
+local flyConnection
 
 Player:Slider({
     Title = "Fly Speed",
@@ -207,42 +195,59 @@ Player:Toggle({
     Default = false,
     Callback = function(state)
         FLY_ENABLED = state
-
-        if flyTask then task.cancel(flyTask) flyTask = nil end
-        local character = LocalPlayer.Character
-        local hrp = character and character:FindFirstChild("HumanoidRootPart")
-        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.PlatformStand = false end
-        if hrp then
-            hrp.Anchored = false
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            hrp.AssemblyLinearVelocity = Vector3.zero
+        
+        local function stopFly()
+            if flyConnection then 
+                flyConnection:Disconnect() 
+                flyConnection = nil 
+            end
+            
+            local character = LocalPlayer.Character
+            local hrp = character and character:FindFirstChild("HumanoidRootPart")
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            
+            if humanoid then
+                humanoid.PlatformStand = false
+            end
+            if hrp then
+                hrp.Anchored = false
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                hrp.AssemblyLinearVelocity = Vector3.zero
+            end
         end
+        
+        stopFly()
+        
         if FLY_ENABLED then
             local camera = Workspace.CurrentCamera
-            flyTask = task.spawn(function()
-                while FLY_ENABLED do
-                    local character = LocalPlayer.Character
-                    local hrp = character and character:FindFirstChild("HumanoidRootPart")
-                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                    if hrp and humanoid then
-                        local moveDir = humanoid.MoveDirection
-                        if moveDir.Magnitude > 0 then
-                            hrp.Anchored = false
-                            hrp.AssemblyLinearVelocity = Vector3.zero
-                            hrp.AssemblyAngularVelocity = Vector3.zero
-                            local cameraCF = camera.CFrame
-                            local relativeVector = cameraCF:VectorToObjectSpace(moveDir)
-                            local flyDirection = (cameraCF.RightVector * relativeVector.X) + (cameraCF.LookVector * -relativeVector.Z)
-                            if flyDirection.Magnitude > 0 then flyDirection = flyDirection.Unit end
-                            hrp.CFrame = CFrame.lookAlong(hrp.Position, flyDirection) + (flyDirection * (TargetFlySpeed * 0.03))
-                        else
-                            hrp.AssemblyLinearVelocity = Vector3.zero
-                            hrp.AssemblyAngularVelocity = Vector3.zero
-                            hrp.Anchored = true
+            
+            flyConnection = RunService.RenderStepped:Connect(function(dt)
+                local character = LocalPlayer.Character
+                local hrp = character and character:FindFirstChild("HumanoidRootPart")
+                local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                
+                if hrp and humanoid then
+                    local moveDir = humanoid.MoveDirection
+                    
+                    if moveDir.Magnitude > 0 then
+                        hrp.Anchored = false
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        
+                        local cameraCF = camera.CFrame
+                        local relativeVector = cameraCF:VectorToObjectSpace(moveDir)
+                        local flyDirection = (cameraCF.RightVector * relativeVector.X) + (cameraCF.LookVector * -relativeVector.Z)
+                        
+                        if flyDirection.Magnitude > 0 then
+                            flyDirection = flyDirection.Unit
                         end
+                        
+                        hrp.CFrame = CFrame.lookAlong(hrp.Position, flyDirection) + (flyDirection * (TargetFlySpeed * dt))
+                    else
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        hrp.Anchored = true
                     end
-                    task.wait(0.03)
                 end
             end)
         end
@@ -267,7 +272,7 @@ Jigoku:Button({
                 hrp.Anchored = false
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
-
+                
                 local targetCF = touchPart:IsA("BasePart") and touchPart.CFrame or touchPart:GetPivot()
                 character:PivotTo(targetCF)
             end
@@ -295,16 +300,18 @@ Jigoku:Button({
                         HRP.CFrame = part.CFrame + Vector3.new(0, 3, 0)
                         task.wait(0.25)
 
+                        -- Fire prompts
                         for _, d in ipairs(v:GetDescendants()) do
                             if d:IsA("ProximityPrompt") then
                                 fireproximityprompt(d)
                             end
                         end
 
+                        -- Wait until the orb is removed from the folder before moving to the next
                         local startTime = tick()
                         while v and v.Parent == folder and (tick() - startTime < 1.5) do
                             task.wait(0.05)
-
+                            -- Retry firing prompt if it didn't register right away
                             for _, d in ipairs(v:GetDescendants()) do
                                 if d:IsA("ProximityPrompt") then
                                     fireproximityprompt(d)
@@ -354,7 +361,7 @@ end
 
 local function createShihyoshaESP(model)
     if not model or not model:IsA("Model") then return end
-
+    
     local partToAdorn = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart", true)
     if not partToAdorn then return end
 
@@ -388,15 +395,13 @@ local function createShihyoshaESP(model)
     text.Text = "Shihyosha"
     text.Parent = billboard
 
-    local lastUpdate = 0
     local conn = RunService.Heartbeat:Connect(function()
-        if tick() - lastUpdate < 0.4 then return end
-        lastUpdate = tick()
-        if not shihyoshaEnabled or not model.Parent then
+        if not shihyoshaEnabled or not model or not model.Parent then
             pcall(function()
-                billboard:Destroy()
-                highlight:Destroy()
+                if billboard then billboard:Destroy() end
+                if highlight then highlight:Destroy() end
             end)
+            if conn then conn:Disconnect() end
             return
         end
         local char = LocalPlayer.Character
@@ -458,7 +463,7 @@ end
 
 local function createOrbESP(model)
     if not model then return end
-
+    
     local partToAdorn = nil
     if model:IsA("Model") then
         partToAdorn = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
@@ -498,15 +503,13 @@ local function createOrbESP(model)
     text.Text = "Orb"
     text.Parent = billboard
 
-    local lastUpdate = 0
     local conn = RunService.Heartbeat:Connect(function()
-        if tick() - lastUpdate < 0.4 then return end
-        lastUpdate = tick()
-        if not orbsEnabled or not model.Parent then
+        if not orbsEnabled or not model or not model.Parent then
             pcall(function()
-                billboard:Destroy()
-                highlight:Destroy()
+                if billboard then billboard:Destroy() end
+                if highlight then highlight:Destroy() end
             end)
+            if conn then conn:Disconnect() end
             return
         end
         local char = LocalPlayer.Character
